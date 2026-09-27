@@ -208,7 +208,7 @@ jobs:
           cpm install --verbose --show-build-log-on-failure --global $ADDITIONAL_MODULES
         env:
           ADDITIONAL_MODULES: ${{ inputs.additional-modules }}
-        if: "!inputs.additional-modules != ''"
+        if: "inputs.additional-modules != ''"
 
       - name: Run Makefile.PL and make
         run: |
