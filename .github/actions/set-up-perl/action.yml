@@ -62,22 +62,35 @@ runs:
       env:
         PERL_VERSION: ${{ steps.set-up-perl.outputs.perl-version }}
 
-    - name: Define Cache Paths
-      id: define-cache-paths
+    - name: Define cache paths (Windows)
+      id: define-cache-paths-windows
+      if: runner.os == 'Windows'
+      # Not bash, because on Windows that is Git Bash, which puts its own MSYS perl ahead of Strawberry
+      # Perl in the $PATH. We would then cache that perl's @INC, which doesn't exist as far as
+      # actions/cache is concerned, so nothing would ever be saved.
+      shell: pwsh
+      run: |
+        perl ./.git/.workflow-perl-dzil-ci/.github/actions/set-up-perl/define-cache-paths.pl "$env:PERL_VERSION" "$env:CACHE_EXTRA"
+      env:
+        PERL_VERSION: ${{ steps.perl-info-windows.outputs.version }}
+        CACHE_EXTRA: ${{ inputs.cache-extra }}
+
+    - name: Define cache paths (Linux/macOS)
+      id: define-cache-paths-unix
+      if: runner.os != 'Windows'
       shell: bash
       run: |
         perl ./.git/.workflow-perl-dzil-ci/.github/actions/set-up-perl/define-cache-paths.pl "$PERL_VERSION" "$CACHE_EXTRA"
       env:
-        # Only one of these two steps runs, so the other one's output is empty.
-        PERL_VERSION:
-          ${{ steps.perl-info-unix.outputs.version }}${{ steps.perl-info-windows.outputs.version }}
+        PERL_VERSION: ${{ steps.perl-info-unix.outputs.version }}
         CACHE_EXTRA: ${{ inputs.cache-extra }}
 
     - name: Cache Perl modules
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
+        # Only one of the define cache paths steps runs, so the other one's output is empty.
         path: |
-          ${{ steps.define-cache-paths.outputs.cache-paths }}
+          ${{ steps.define-cache-paths-unix.outputs.cache-paths }}${{ steps.define-cache-paths-windows.outputs.cache-paths }}
         key: |
           ${{ inputs.cache-prefix }}-perl-cache-${{ steps.perl-info-unix.outputs.hash }}${{ steps.perl-info-windows.outputs.hash }}-${{ hashFiles(inputs.cache-key-file) }}
         restore-keys: |
