@@ -10,9 +10,14 @@ my $with_windows = shift;
 
 my @jobs = (
     {
-        name           => 'Linux',
+        name           => "Linux (Perl $min_perl)",
         'runs-on'      => 'ubuntu-latest',
         'perl-version' => $min_perl,
+    },
+    {
+        name           => 'Linux (Perl latest)',
+        'runs-on'      => 'ubuntu-latest',
+        'perl-version' => 'latest',
     },
     {
         name           => 'macOS',
