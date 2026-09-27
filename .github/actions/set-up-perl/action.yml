@@ -21,7 +21,7 @@ runs:
   steps:
     - name: Set Up Perl ${{ inputs.perl-version }}
       if: runner.os != 'Windows'
-      uses: shogo82148/actions-setup-perl@v1
+      uses: shogo82148/actions-setup-perl@ac3202722f5744e62a8fa3af3e1aaaebb08861f3 # v1.44.0
       id: set-up-perl
       with:
         perl-version: ${{ inputs.perl-version }}
@@ -40,6 +40,7 @@ runs:
       run: cpanm --notest App::cpm
 
     - name: Get Strawberry Perl version and hash (Windows)
+      id: perl-info-windows
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
@@ -47,29 +48,37 @@ runs:
         $sha256 = [System.Security.Cryptography.SHA256]::Create()
         $bytes = [System.Text.Encoding]::UTF8.GetBytes((perl -V | Out-String))
         $hash = [System.BitConverter]::ToString($sha256.ComputeHash($bytes)).Replace('-', '').ToLower()
-        "SETUP_PERL_VERSION=$version" | Out-File -Append -FilePath $env:GITHUB_ENV
-        "SETUP_PERL_HASH=$hash" | Out-File -Append -FilePath $env:GITHUB_ENV
+        "version=$version" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
+        "hash=$hash" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
 
     - name: Get Perl version and hash (Linux/macOS)
+      id: perl-info-unix
       if: runner.os != 'Windows'
       shell: bash
       run: |
         HASH=$(perl -V | perl -MDigest::SHA=sha256_hex -0777 -e 'print sha256_hex(<STDIN>)')
-        echo "SETUP_PERL_VERSION=${{ steps.set-up-perl.outputs.perl-version }}" >> "$GITHUB_ENV"
-        echo "SETUP_PERL_HASH=$HASH" >> "$GITHUB_ENV"
+        echo "version=$PERL_VERSION" >> "$GITHUB_OUTPUT"
+        echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+      env:
+        PERL_VERSION: ${{ steps.set-up-perl.outputs.perl-version }}
 
     - name: Define Cache Paths
       id: define-cache-paths
       shell: bash
       run: |
-        perl ./.git/.workflow-perl-dzil-ci/.github/actions/set-up-perl/define-cache-paths.pl "${{ env.SETUP_PERL_VERSION }}" "${{ inputs.cache-extra }}"
+        perl ./.git/.workflow-perl-dzil-ci/.github/actions/set-up-perl/define-cache-paths.pl "$PERL_VERSION" "$CACHE_EXTRA"
+      env:
+        # Only one of these two steps runs, so the other one's output is empty.
+        PERL_VERSION:
+          ${{ steps.perl-info-unix.outputs.version }}${{ steps.perl-info-windows.outputs.version }}
+        CACHE_EXTRA: ${{ inputs.cache-extra }}
 
-    - name:
-      uses: actions/cache@v6
+    - name: Cache Perl modules
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.define-cache-paths.outputs.cache-paths }}
         key: |
-          ${{ inputs.cache-prefix }}-perl-cache-${{ env.SETUP_PERL_HASH }}-${{ hashFiles(inputs.cache-key-file) }}
+          ${{ inputs.cache-prefix }}-perl-cache-${{ steps.perl-info-unix.outputs.hash }}${{ steps.perl-info-windows.outputs.hash }}-${{ hashFiles(inputs.cache-key-file) }}
         restore-keys: |
-          ${{ inputs.cache-prefix }}-perl-cache-${{ env.SETUP_PERL_HASH }}
+          ${{ inputs.cache-prefix }}-perl-cache-${{ steps.perl-info-unix.outputs.hash }}${{ steps.perl-info-windows.outputs.hash }}

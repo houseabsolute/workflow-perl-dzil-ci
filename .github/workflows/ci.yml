@@ -1,3 +1,5 @@
+name: Perl dzil CI
+
 on:
   workflow_call:
     inputs:
@@ -44,17 +46,23 @@ on:
         type: boolean
         default: true
 
+permissions:
+  contents: read
+
 jobs:
   build-release-tarball:
     name: Build release tarball
     runs-on: ubuntu-latest
     steps:
       - name: Check out Perl project repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Check out workflow repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           repository: houseabsolute/workflow-perl-dzil-ci
           ref: ${{ inputs.ref }}
           # We have to use `./` at the beginning of a `uses:` path, so putting it under `.git`
@@ -74,7 +82,9 @@ jobs:
       # before falling back to offline data, so the dist loses its GitHub
       # metadata.
       - name: Set github.user for Dist::Zilla::Plugin::GitHub
-        run: git config github.user "${{ github.repository_owner }}"
+        run: git config github.user "$REPOSITORY_OWNER"
+        env:
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
 
       - name: Install Dist::Zilla and Test::Harness
         run: cpm install --verbose --show-build-log-on-failure --global Dist::Zilla Test::Harness
@@ -84,7 +94,7 @@ jobs:
         run: dzil authordeps | grep -v '^inc::' > /tmp/dzil-authordeps.txt
 
       - name: Upload dzil authordeps artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dzil-authordeps.txt
           path: /tmp/dzil-authordeps.txt
@@ -97,7 +107,7 @@ jobs:
         run: dzil build
 
       - name: Upload release tarball artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: "${{ inputs.dist }}.tar.gz"
           path: "*.tar.gz"
@@ -109,8 +119,9 @@ jobs:
       matrix: ${{ steps.define-matrix.outputs.matrix }}
     steps:
       - name: Check out workflow repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           repository: houseabsolute/workflow-perl-dzil-ci
           ref: ${{ inputs.ref }}
           path: ./.git/.workflow-perl-dzil-ci
@@ -118,11 +129,17 @@ jobs:
       - name: Define test matrix
         id: define-matrix
         run: |
-          perl ./.git/.workflow-perl-dzil-ci/.github/workflows/define-test-matrix.pl "${{ inputs.min-perl }}" "${{ inputs.with-threads }}" "${{ inputs.with-windows }}"
+          perl ./.git/.workflow-perl-dzil-ci/.github/workflows/define-test-matrix.pl "$MIN_PERL" "$WITH_THREADS" "$WITH_WINDOWS"
+        env:
+          MIN_PERL: ${{ inputs.min-perl }}
+          WITH_THREADS: ${{ inputs.with-threads }}
+          WITH_WINDOWS: ${{ inputs.with-windows }}
 
       - name: Show matrix
         run: |
-          echo '${{ steps.define-matrix.outputs.matrix }}' | jq .
+          echo "$MATRIX" | jq .
+        env:
+          MATRIX: ${{ steps.define-matrix.outputs.matrix }}
 
   author-tests:
     needs: build-release-tarball
@@ -134,17 +151,20 @@ jobs:
           set -e
           set -x
 
-          all="${{ inputs.apt-packages }} ${{ inputs.apt-packages-for-author-tests }}"
           # This will turn newlines into spaces.
-          packages="$(perl -E 'say join q{ }, grep { length } split /\s+/, q{'"$all"'}')"
+          packages="$(perl -E 'say join q{ }, grep { length } split /\s+/, "$ENV{APT_PACKAGES} $ENV{APT_PACKAGES_FOR_AUTHOR_TESTS}"')"
           if [ -n "$packages" ]; then
               sudo apt-get update
               sudo apt-get --yes install $packages
           fi
+        env:
+          APT_PACKAGES: ${{ inputs.apt-packages }}
+          APT_PACKAGES_FOR_AUTHOR_TESTS: ${{ inputs.apt-packages-for-author-tests }}
 
       - name: Check out workflow repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           repository: houseabsolute/workflow-perl-dzil-ci
           ref: ${{ inputs.ref }}
           path: ./.git/.workflow-perl-dzil-ci
@@ -185,7 +205,9 @@ jobs:
 
       - name: Install additional deps
         run: |
-          cpm install --verbose --show-build-log-on-failure --global ${{ inputs.additional-modules }}
+          cpm install --verbose --show-build-log-on-failure --global $ADDITIONAL_MODULES
+        env:
+          ADDITIONAL_MODULES: ${{ inputs.additional-modules }}
         if: "!inputs.additional-modules != ''"
 
       - name: Run Makefile.PL and make
@@ -219,12 +241,12 @@ jobs:
           set -e
           set -x
 
-          if [ -n "${{ inputs.apt-packages }}" ]; then
-              sudo apt-get update
-              # This will turn newlines into spaces.
-              packages="$(perl -E 'say join q{ }, split /\s+/, q{${{ inputs.apt-packages }}}')"
-              sudo apt-get --yes install $packages
-          fi
+          sudo apt-get update
+          # This will turn newlines into spaces.
+          packages="$(perl -E 'say join q{ }, grep { length } split /\s+/, $ENV{APT_PACKAGES}')"
+          sudo apt-get --yes install $packages
+        env:
+          APT_PACKAGES: ${{ inputs.apt-packages }}
         if: "inputs.apt-packages != '' && startsWith(matrix.os-and-perl.runs-on, 'ubuntu')"
 
       - name: Install extra Homebrew packages
@@ -233,7 +255,7 @@ jobs:
           set -x
 
           # This will turn newlines into spaces.
-          packages="$(perl -E 'say join q{ }, split /\s+/, q{${{ inputs.brew-packages }}}')"
+          packages="$(perl -E 'say join q{ }, grep { length } split /\s+/, $ENV{BREW_PACKAGES}')"
           brew install $packages
 
           # Homebrew installs under its own prefix, which is not on the
@@ -244,11 +266,14 @@ jobs:
           prefix="$(brew --prefix)"
           echo "CPATH=${prefix}/include${CPATH:+:${CPATH}}" >> "$GITHUB_ENV"
           echo "LIBRARY_PATH=${prefix}/lib${LIBRARY_PATH:+:${LIBRARY_PATH}}" >> "$GITHUB_ENV"
+        env:
+          BREW_PACKAGES: ${{ inputs.brew-packages }}
         if: "inputs.brew-packages != '' && startsWith(matrix.os-and-perl.runs-on, 'macos')"
 
       - name: Check out workflow repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           repository: houseabsolute/workflow-perl-dzil-ci
           ref: ${{ inputs.ref }}
           path: ./.git/.workflow-perl-dzil-ci
@@ -272,7 +297,9 @@ jobs:
 
       - name: Install additional deps
         run: |
-          cpm install --verbose --show-build-log-on-failure --global ${{ inputs.additional-modules }}
+          cpm install --verbose --show-build-log-on-failure --global $ADDITIONAL_MODULES
+        env:
+          ADDITIONAL_MODULES: ${{ inputs.additional-modules }}
         if: "inputs.additional-modules != ''"
 
       - name: Run Makefile.PL and make (Linux/macOS)

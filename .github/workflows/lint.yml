@@ -1,3 +1,5 @@
+name: Perl lint
+
 on:
   workflow_call:
     inputs:
@@ -11,6 +13,9 @@ on:
           whitespace-separated list of packages."
         type: string
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint
@@ -21,19 +26,23 @@ jobs:
           set -e
           set -x
 
-          if [ -n "${{ inputs.apt-packages }}" ]; then
-              sudo apt-get update
-              # This will turn newlines into spaces.
-              packages="$(perl -E 'say join q{ }, split /\s+/, q{${{ inputs.apt-packages }}}')"
-              sudo apt-get --yes install $packages
-          fi
+          sudo apt-get update
+          # This will turn newlines into spaces.
+          packages="$(perl -E 'say join q{ }, grep { length } split /\s+/, $ENV{APT_PACKAGES}')"
+          sudo apt-get --yes install $packages
+        env:
+          APT_PACKAGES: ${{ inputs.apt-packages }}
+        if: "inputs.apt-packages != ''"
 
       - name: Check out Perl project repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Check out workflow repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           repository: houseabsolute/workflow-perl-dzil-ci
           ref: ${{ inputs.ref }}
           # We have to use `./` at the beginning of a `uses:` path, so putting it under `.git`

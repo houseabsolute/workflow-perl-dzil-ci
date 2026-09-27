@@ -8,7 +8,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: actions/download-artifact@v8
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:
         name: "${{ inputs.dist }}.tar.gz"
 
@@ -18,6 +18,8 @@ runs:
         set -e
         set -x
 
-        tar -xvzf ${{ inputs.dist }}-*.tar.gz
-        mv ${{ inputs.dist }}-*/* .
-        rm -fr ${{ inputs.dist }}-*
+        tar -xvzf "$DIST"-*.tar.gz
+        mv "$DIST"-*/* .
+        rm -fr "$DIST"-*
+      env:
+        DIST: ${{ inputs.dist }}
